@@ -6,23 +6,24 @@ from datetime import datetime
 # --- 1. Page Configuration ---
 st.set_page_config(page_title="Adrito's AI 2026", page_icon="🚀", layout="wide")
 
-# --- 2. Custom Styling ---
+# --- 2. Custom Styling (FIXED VERSION) ---
 st.markdown("""
     <style>
     .stChatMessage { border-radius: 15px; margin-bottom: 10px; }
+    /* Styling for a cleaner chat look */
     .st-emotion-cache-16idsys p { font-size: 1.1rem; }
     </style>
-    """, unsafe_base64=True)
+    """, unsafe_allow_html=True) # Changed from unsafe_base64 to fix the error
 
 st.title("🚀 Adrito's Cloud AI Assistant")
-st.caption(f"Status: Online | Year: {datetime.now().year} | Engine: Groq Llama 3.1")
+st.caption(f"Status: Online | Current Date: {datetime.now().strftime('%B %d, %Y')} | Engine: Groq Llama 3.1")
 
 # --- 3. API & Secret Setup ---
-# This looks for "GROQ_API_KEY" in your Streamlit Cloud "Secrets" settings
+# Make sure you have GROQ_API_KEY in your Streamlit Cloud Secrets!
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
 
 if not GROQ_API_KEY:
-    st.error("Please add your GROQ_API_KEY to Streamlit Secrets!")
+    st.error("Missing API Key! Go to Settings > Secrets and add: GROQ_API_KEY = 'your_key'")
     st.stop()
 
 client = Groq(api_key=GROQ_API_KEY)
@@ -35,19 +36,25 @@ with st.sidebar:
     context_text = ""
     if uploaded_file:
         with st.spinner("Reading document..."):
-            if uploaded_file.type == "application/pdf":
-                reader = PdfReader(uploaded_file)
-                for page in reader.pages:
-                    context_text += page.extract_text() + "\n"
-            else:
-                context_text = uploaded_file.read().decode("utf-8")
-        st.success(f"Context loaded: {uploaded_file.name}")
+            try:
+                if uploaded_file.type == "application/pdf":
+                    reader = PdfReader(uploaded_file)
+                    for page in reader.pages:
+                        text = page.extract_text()
+                        if text:
+                            context_text += text + "\n"
+                else:
+                    context_text = uploaded_file.read().decode("utf-8")
+                st.success(f"Context loaded: {uploaded_file.name}")
+            except Exception as e:
+                st.error(f"Could not read file: {e}")
     
+    st.divider()
     if st.button("Clear Chat History"):
         st.session_state.messages = []
         st.rerun()
 
-# --- 5. Chat History & Logic ---
+# --- 5. Chat History Initialization ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -56,32 +63,41 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- 6. The 2026 Engine ---
+# --- 6. The 2026 AI Logic ---
 if prompt := st.chat_input("Ask me anything..."):
-    # Display user message
+    # Show user message
     st.chat_message("user").markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
     # Prepare Context (Current Date + File Content)
     current_date = datetime.now().strftime("%B %d, %Y")
-    system_instruction = f"Today's date is {current_date}. You are a helpful AI assistant in the year 2026."
+    system_instruction = (
+        f"You are a helpful AI assistant. Today's date is {current_date}. "
+        "The current year is 2026. If the user provides document context, "
+        "use it to answer their questions accurately."
+    )
     
+    # If a file is uploaded, add it to the user's prompt as context
     if context_text:
-        # We give the AI the first 15,000 characters of the file to stay within limits
-        final_prompt = f"ATTACHED FILE CONTENT:\n{context_text[:15000]}\n\nUSER QUESTION: {prompt}"
+        # Limit context to ~12,000 characters to prevent crashing the AI's "brain"
+        user_payload = f"DOCUMENT CONTEXT:\n{context_text[:12000]}\n\nUSER QUESTION: {prompt}"
     else:
-        final_prompt = prompt
+        user_payload = prompt
 
     # AI Response Generation
     with st.chat_message("assistant"):
         response_placeholder = st.empty()
         full_response = ""
         
-        # Build the conversation payload
+        # Build message history with the system instruction at the top
         messages_payload = [{"role": "system", "content": system_instruction}]
+        
+        # Add past history (excluding the very last prompt we just handled)
         for m in st.session_state.messages[:-1]:
             messages_payload.append({"role": m["role"], "content": m["content"]})
-        messages_payload.append({"role": "user", "content": final_prompt})
+            
+        # Add the current prompt (with file context if it exists)
+        messages_payload.append({"role": "user", "content": user_payload})
 
         try:
             completion = client.chat.completions.create(
@@ -99,4 +115,4 @@ if prompt := st.chat_input("Ask me anything..."):
             st.session_state.messages.append({"role": "assistant", "content": full_response})
             
         except Exception as e:
-            st.error(f"Error: {str(e)}")
+            st.error(f"Groq API Error: {str(e)}")
