@@ -3,27 +3,28 @@ from groq import Groq
 from pypdf import PdfReader
 from datetime import datetime
 
-# --- 1. Page Configuration ---
+# --- 1. Page Config & Styling ---
 st.set_page_config(page_title="Adrito's AI 2026", page_icon="🚀", layout="wide")
 
-# Custom Styling for Sidebar and Chat
+# This CSS ensures the Sidebar buttons and File Uploader look clean
 st.markdown("""
     <style>
     .stChatMessage { border-radius: 15px; margin-bottom: 10px; border: 1px solid #ddd; }
-    .sidebar-btn-container { display: flex; align-items: center; margin-bottom: 5px; }
+    [data-testid="stSidebar"] { min-width: 300px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. Memory & Session Initialization ---
+# --- 2. Initialize Permanent Session Memory ---
 if "all_sessions" not in st.session_state:
     st.session_state.all_sessions = {"New Chat Session": []}
 if "current_chat" not in st.session_state:
     st.session_state.current_chat = "New Chat Session"
 
-# --- 3. Sidebar: Document Center & Chat History ---
+# --- 3. Sidebar: Document Center & Smart History ---
 with st.sidebar:
-    st.title("📁 Document Center")
-    uploaded_file = st.file_uploader("Upload Context", type=["pdf", "txt", "py", "md"])
+    st.header("📁 Document Center")
+    # This is the file upload box you need
+    uploaded_file = st.file_uploader("Upload PDF, TXT, or PY", type=["pdf", "txt", "py", "md"], key="file_viewer")
     
     context_text = ""
     if uploaded_file:
@@ -34,32 +35,34 @@ with st.sidebar:
                     context_text += page.extract_text() + "\n"
             else:
                 context_text = uploaded_file.read().decode("utf-8")
-            st.success("Context loaded!")
+            st.success("Context loaded successfully!")
         except Exception as e:
-            st.error(f"Read Error: {e}")
+            st.error(f"File Error: {e}")
 
     st.divider()
-    st.title("📂 Chat History")
+    st.header("📂 Chat History")
     
-    if st.button("➕ New Chat", use_container_width=True):
-        new_name = f"Session {datetime.now().strftime('%H:%M:%S')}"
-        st.session_state.all_sessions[new_name] = []
-        st.session_state.current_chat = new_name
+    if st.button("➕ Start New Chat", use_container_width=True):
+        temp_name = f"Session {datetime.now().strftime('%H:%M:%S')}"
+        st.session_state.all_sessions[temp_name] = []
+        st.session_state.current_chat = temp_name
         st.rerun()
 
-    st.divider()
+    st.write("") # Spacer
 
-    # History List with selection and deletion
+    # --- THE DELETE & SELECT LOGIC ---
     for chat_title in list(st.session_state.all_sessions.keys()):
-        cols = st.columns([0.8, 0.2])
-        with cols[0]:
+        # We use columns to put the Delete [X] right next to the Name
+        col1, col2 = st.columns([0.8, 0.2])
+        
+        with col1:
             is_active = "primary" if chat_title == st.session_state.current_chat else "secondary"
-            if st.button(chat_title, use_container_width=True, type=is_active, key=f"sel_{chat_title}"):
+            if st.button(chat_title, use_container_width=True, type=is_active, key=f"btn_{chat_title}"):
                 st.session_state.current_chat = chat_title
                 st.rerun()
-        with cols[1]:
-            # Simple button for deletion
-            if st.button("X", key=f"del_{chat_title}", help="Delete Chat"):
+        
+        with col2:
+            if st.button("X", key=f"del_{chat_title}", help="Delete this chat"):
                 del st.session_state.all_sessions[chat_title]
                 if st.session_state.current_chat == chat_title:
                     remaining = list(st.session_state.all_sessions.keys())
@@ -67,67 +70,77 @@ with st.sidebar:
                     if not remaining: st.session_state.all_sessions["New Chat Session"] = []
                 st.rerun()
 
-# --- 4. AI Logic ---
-key = st.secrets.get("GROQ_API_KEY")
-if not key:
-    st.error("Add GROQ_API_KEY to Secrets!")
+# --- 4. API Engine Setup ---
+try:
+    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+    client = Groq(api_key=GROQ_API_KEY)
+except Exception:
+    st.error("🔑 Please add 'GROQ_API_KEY' to your Streamlit Secrets!")
     st.stop()
 
-client = Groq(api_key=key)
+# --- 5. Main Chat Interface ---
+st.title(f"🚀 {st.session_state.current_chat}")
 messages = st.session_state.all_sessions.get(st.session_state.current_chat, [])
 
-st.title(f"🚀 {st.session_state.current_chat}")
-
+# Always display the history first
 for msg in messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-if prompt := st.chat_input("Ask Adrito AI..."):
+# --- 6. Chat Input & Smart Renaming Logic ---
+if prompt := st.chat_input("How can I help you today?"):
+    # 1. Save and display user message
     messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    # 2. Generate AI Response
     with st.chat_message("assistant"):
-        placeholder = st.empty()
-        full_res = ""
+        response_placeholder = st.empty()
+        full_response = ""
         
-        # 2026 Awareness
-        sys_msg = f"Current Date: {datetime.now().strftime('%B %d, %Y')}. Year is 2026."
+        # System instructions to keep it in 2026
+        sys_info = f"System: Current date is {datetime.now().strftime('%B %d, %Y')}. The year is 2026."
         
-        # Prepare context payload
-        user_input = prompt
+        # Prepare context if a file was uploaded
+        final_prompt = prompt
         if context_text:
-            user_input = f"CONTEXT:\n{context_text[:8000]}\n\nQUESTION: {prompt}"
+            final_prompt = f"FILE CONTEXT:\n{context_text[:7000]}\n\nUSER QUESTION: {prompt}"
 
-        # Stream the response
-        stream = client.chat.completions.create(
+        # Stream the response from Groq
+        completion = client.chat.completions.create(
             model="llama-3.1-8b-instant",
-            messages=[{"role": "system", "content": sys_msg}] + messages[:-1] + [{"role": "user", "content": user_input}],
+            messages=[{"role": "system", "content": sys_info}] + 
+                     [m for m in messages[:-1]] + 
+                     [{"role": "user", "content": final_prompt}],
             stream=True,
         )
-        for chunk in stream:
-            if chunk.choices[0].delta.content:
-                full_res += chunk.choices[0].delta.content
-                placeholder.markdown(full_res + "▌")
-        placeholder.markdown(full_res)
-        messages.append({"role": "assistant", "content": full_res})
 
-    # --- 5. SMART RENAMING LOGIC ---
-    # After the first exchange, ask the AI to summarize the TOPIC
-    if len(messages) == 2:
+        for chunk in completion:
+            if chunk.choices[0].delta.content:
+                full_response += chunk.choices[0].delta.content
+                response_placeholder.markdown(full_response + "▌")
+        
+        response_placeholder.markdown(full_response)
+        messages.append({"role": "assistant", "content": full_response})
+
+    # --- SMART RENAMING (The "Magic" part) ---
+    # If this is the first exchange, ask AI to summarize a title
+    if len(messages) <= 2 and st.session_state.current_chat.startswith("Session "):
         try:
-            name_gen = client.chat.completions.create(
+            naming_chat = client.chat.completions.create(
                 model="llama-3.1-8b-instant",
                 messages=[{
                     "role": "system", 
-                    "content": "Generate a 3-4 word title for this chat topic. Return ONLY the title, no quotes or punctuation."
-                }, {"role": "user", "content": f"User: {prompt}\nAI: {full_res}"}]
+                    "content": "Summarize the user's topic into a 2-3 word title. Return ONLY the title words."
+                }, {"role": "user", "content": prompt}]
             )
-            smart_title = name_gen.choices[0].message.content.strip()
-            # Update the dictionary key
-            st.session_state.all_sessions[smart_title] = st.session_state.all_sessions.pop(st.session_state.current_chat)
-            st.session_state.current_chat = smart_title
-        except:
-            pass # Fallback to original name if renaming fails
+            ai_title = naming_chat.choices[0].message.content.strip().replace(".", "")
             
+            # Swap the session name in the dictionary
+            st.session_state.all_sessions[ai_title] = st.session_state.all_sessions.pop(st.session_state.current_chat)
+            st.session_state.current_chat = ai_title
+        except:
+            pass # Fallback to original name if naming fails
+
     st.rerun()
