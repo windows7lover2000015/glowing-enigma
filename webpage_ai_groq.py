@@ -16,6 +16,9 @@ if "all_sessions" not in st.session_state:
     st.session_state.all_sessions = {"New Chat Session": []}
 if "current_chat" not in st.session_state:
     st.session_state.current_chat = "New Chat Session"
+# Track if the welcome popup has already been shown to this visitor
+if "popup_shown" not in st.session_state:
+    st.session_state.popup_shown = False
 
 # --- 3. FILE PARSERS ---
 def extract_text(file):
@@ -43,7 +46,7 @@ MODEL_MAP = {
 
 with st.sidebar:
     st.title("⚙️ AI Control")
-    selected_label = st.selectbox("🧠 Choose Brain Power", options=list(MODEL_MAP.keys()), index=0, key="model_v6")
+    selected_label = st.selectbox("🧠 Choose Brain Power", options=list(MODEL_MAP.keys()), index=0, key="model_v8")
     model_choice = MODEL_MAP[selected_label]
     is_image_mode = (model_choice == "NANO_MODE")
     
@@ -53,7 +56,6 @@ with st.sidebar:
     
     st.divider()
     
-    # CHAT MANAGEMENT SECTION
     st.header("📂 Chats")
     
     if st.button("➕ Start New Chat", use_container_width=True):
@@ -62,7 +64,6 @@ with st.sidebar:
         st.session_state.current_chat = new_id
         st.rerun()
 
-    # Fixed "Delete All" Logic - Always visible if there's history
     if len(st.session_state.all_sessions) > 1:
         if st.button("🗑️ Delete All History", use_container_width=True, type="secondary", key="del_all_btn"):
             st.session_state.all_sessions = {"New Chat Session": []}
@@ -71,26 +72,42 @@ with st.sidebar:
 
     st.divider()
     
-    # LIST RECENT CHATS WITH DELETE BUTTONS
     for chat_title in list(st.session_state.all_sessions.keys()):
         cols = st.columns([0.8, 0.2])
         
-        # Select Chat
         if cols[0].button(chat_title, key=f"btn_{chat_title}", use_container_width=True, 
                           type="primary" if chat_title == st.session_state.current_chat else "secondary"):
             st.session_state.current_chat = chat_title
             st.rerun()
         
-        # Individual Delete Button (only if more than 1 chat exists)
         if len(st.session_state.all_sessions) > 1:
             if cols[1].button("❌", key=f"del_single_{chat_title}"):
                 del st.session_state.all_sessions[chat_title]
-                # Reset current chat if the active one was deleted
                 if st.session_state.current_chat == chat_title:
                     st.session_state.current_chat = list(st.session_state.all_sessions.keys())[0]
                 st.rerun()
 
-# --- 5. MAIN INTERFACE ---
+# --- 5. WELCOME POPUP LOGIC ---
+# Using Streamlit's native dialog engine to create a dismissible box overlay
+@st.dialog("👋 Welcome!")
+def show_welcome_box():
+    st.markdown("""
+    ### Hello! This is Adrito's AI Chatbot.
+    This chatbot is made by **Adrito Roy** and is open source. 
+    
+    🌐 **GitHub Repository:**
+    [glowing-enigma](https://github.com/windows7lover2000015/glowing-enigma/tree/main)
+    """)
+    st.divider()
+    if st.button("Ok!", use_container_width=True, type="primary"):
+        st.session_state.popup_shown = True
+        st.rerun()
+
+# Trigger popup immediately on page load if it hasn't been acknowledged yet
+if not st.session_state.popup_shown:
+    show_welcome_box()
+
+# --- 6. MAIN INTERFACE ---
 st.title(f"🚀 {st.session_state.current_chat}")
 
 try:
@@ -99,6 +116,7 @@ except:
     st.error("Missing Groq API Key!")
     st.stop()
 
+# Display chat history
 messages = st.session_state.all_sessions[st.session_state.current_chat]
 for msg in messages:
     with st.chat_message(msg["role"]):
@@ -107,7 +125,7 @@ for msg in messages:
         else:
             st.markdown(msg["content"])
 
-# --- 6. LOGIC ---
+# --- 7. UNIFIED CHAT LOGIC ---
 if prompt := st.chat_input("Message or Image Prompt..."):
     messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -120,7 +138,6 @@ if prompt := st.chat_input("Message or Image Prompt..."):
             for attempt in range(2):
                 try:
                     seed = datetime.now().microsecond
-                    # Added 'model=flux' for faster 2026 rendering
                     image_url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}?width=1280&height=720&seed={seed}&model=flux&nologo=true"
                     
                     img_response = requests.get(image_url, timeout=60)
@@ -149,7 +166,7 @@ if prompt := st.chat_input("Message or Image Prompt..."):
             try:
                 stream = groq_client.chat.completions.create(
                     model=model_choice,
-                    messages=[{"role": "system", "content": "You are a helpful 2026 AI."}] + messages[:-1] + [{"role": "user", "content": prompt + context}],
+                    messages=[{"role": "system", "content": "You are a helpful AI assistant."}] + messages[:-1] + [{"role": "user", "content": prompt + context}],
                     stream=True
                 )
                 for chunk in stream:
