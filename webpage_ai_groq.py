@@ -16,7 +16,6 @@ if "all_sessions" not in st.session_state:
     st.session_state.all_sessions = {"New Chat Session": []}
 if "current_chat" not in st.session_state:
     st.session_state.current_chat = "New Chat Session"
-# Track if the welcome popup has already been shown to this visitor
 if "popup_shown" not in st.session_state:
     st.session_state.popup_shown = False
 
@@ -44,18 +43,44 @@ MODEL_MAP = {
     "🎨 Nano Banana (Image Gen)": "NANO_MODE"
 }
 
+# Supported Global Languages Dictionary
+LANGUAGES = {
+    "English 🇬🇧": "English",
+    "Bengali 🇧🇩": "Bengali",
+    "Hindi 🇮🇳": "Hindi",
+    "Spanish 🇪🇸": "Spanish",
+    "French 🇫🇷": "French",
+    "German 🇩🇪": "German",
+    "Mandarin Chinese 🇨🇳": "Mandarin Chinese",
+    "Japanese 🇯🇵": "Japanese",
+    "Korean 🇰🇷": "Korean",
+    "Arabic 🇸🇦": "Arabic",
+    "Russian 🇷🇺": "Russian",
+    "Portuguese 🇵🇹": "Portuguese",
+    "Italian 🇮🇹": "Italian",
+    "Urdu 🇵🇰": "Urdu",
+    "Tamil 🇮🇳": "Tamil"
+}
+
 with st.sidebar:
     st.title("⚙️ AI Control")
-    selected_label = st.selectbox("🧠 Choose Brain Power", options=list(MODEL_MAP.keys()), index=0, key="model_v8")
+    
+    # Model Selector
+    selected_label = st.selectbox("🧠 Choose Brain Power", options=list(MODEL_MAP.keys()), index=0, key="model_v10")
     model_choice = MODEL_MAP[selected_label]
     is_image_mode = (model_choice == "NANO_MODE")
+    
+    # Global Language Selector
+    selected_lang = st.selectbox("🌐 Select AI Output Language", options=list(LANGUAGES.keys()), index=0, key="lang_selector")
+    target_language = LANGUAGES[selected_lang]
     
     if not is_image_mode:
         web_search = st.toggle("Enable Live Web Search", value=True)
         uploaded_file = st.file_uploader("📎 Upload Context", type=['txt', 'py', 'md', 'pdf', 'docx'])
+    else:
+        st.info("🎨 Nano Banana is active. Prompt for an image below.")
     
     st.divider()
-    
     st.header("📂 Chats")
     
     if st.button("➕ Start New Chat", use_container_width=True):
@@ -71,15 +96,12 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-    
     for chat_title in list(st.session_state.all_sessions.keys()):
         cols = st.columns([0.8, 0.2])
-        
         if cols[0].button(chat_title, key=f"btn_{chat_title}", use_container_width=True, 
                           type="primary" if chat_title == st.session_state.current_chat else "secondary"):
             st.session_state.current_chat = chat_title
             st.rerun()
-        
         if len(st.session_state.all_sessions) > 1:
             if cols[1].button("❌", key=f"del_single_{chat_title}"):
                 del st.session_state.all_sessions[chat_title]
@@ -88,7 +110,6 @@ with st.sidebar:
                 st.rerun()
 
 # --- 5. WELCOME POPUP LOGIC ---
-# Using Streamlit's native dialog engine to create a dismissible box overlay
 @st.dialog("👋 Welcome!")
 def show_welcome_box():
     st.markdown("""
@@ -103,7 +124,6 @@ def show_welcome_box():
         st.session_state.popup_shown = True
         st.rerun()
 
-# Trigger popup immediately on page load if it hasn't been acknowledged yet
 if not st.session_state.popup_shown:
     show_welcome_box()
 
@@ -163,10 +183,13 @@ if prompt := st.chat_input("Message or Image Prompt..."):
                 file_text = extract_text(uploaded_file)
                 context = f"\n\n[FILE DATA]\n{file_text}"
             
+            # Formulate the System Instruction based on translation needs
+            system_instruction = f"You are a helpful AI assistant. IMPORTANT: You must respond entirely in the {target_language} language, regardless of the language the user writes in."
+            
             try:
                 stream = groq_client.chat.completions.create(
                     model=model_choice,
-                    messages=[{"role": "system", "content": "You are a helpful AI assistant."}] + messages[:-1] + [{"role": "user", "content": prompt + context}],
+                    messages=[{"role": "system", "content": system_instruction}] + messages[:-1] + [{"role": "user", "content": prompt + context}],
                     stream=True
                 )
                 for chunk in stream:
@@ -184,7 +207,7 @@ if prompt := st.chat_input("Message or Image Prompt..."):
         try:
             name_gen = groq_client.chat.completions.create(
                 model="openai/gpt-oss-20b",
-                messages=[{"role": "system", "content": "Return 2 words summarize topic. No quotes."}, {"role": "user", "content": prompt}]
+                messages=[{"role": "system", "content": f"Return 2 words summarizing topic in the {target_language} language. No quotes."}, {"role": "user", "content": prompt}]
             )
             smart_title = name_gen.choices[0].message.content.strip().replace('"', '')
             st.session_state.all_sessions[smart_title] = st.session_state.all_sessions.pop(st.session_state.current_chat)
