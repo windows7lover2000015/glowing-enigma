@@ -7,19 +7,57 @@ from docx import Document
 import io
 import requests
 import time
+from google.cloud import firestore
+from google.oauth2 import service_account
 
 # --- 1. PAGE SETUP ---
 st.set_page_config(page_title="Adrito's AI Chatbot", page_icon="🌐", layout="wide")
 
-# --- 2. SESSION STATE ---
+# --- 2. CLOUD DATABASE CONNECTION ---
+@st.cache_resource
+def get_db():
+    cred_dict = dict(st.secrets["firebase"])
+    # Handle both formatted multiline strings and escaped newlines
+    if "\\n" in cred_dict["private_key"]:
+        cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
+    creds = service_account.Credentials.from_service_account_info(cred_dict)
+    return firestore.Client(credentials=creds, project=cred_dict["project_id"])
+
+try:
+    db = get_db()
+except Exception as e:
+    st.error(f"Cloud Database Connection Failed: {e}")
+    st.stop()
+
+# --- 3. SESSION STATE & CLOUD SYNC ---
+USER_ID = "adrito_default_user"
+
 if "all_sessions" not in st.session_state:
-    st.session_state.all_sessions = {"New Chat Session": []}
+    with st.spinner("☁️ Syncing history with Cloud Database..."):
+        try:
+            doc_ref = db.collection("users").document(USER_ID)
+            doc = doc_ref.get()
+            if doc.exists:
+                st.session_state.all_sessions = doc.to_dict().get("chats", {"New Chat Session": []})
+            else:
+                st.session_state.all_sessions = {"New Chat Session": []}
+                doc_ref.set({"chats": st.session_state.all_sessions})
+        except Exception as e:
+            st.session_state.all_sessions = {"New Chat Session": []}
+
 if "current_chat" not in st.session_state:
-    st.session_state.current_chat = "New Chat Session"
+    st.session_state.current_chat = list(st.session_state.all_sessions.keys())[0]
+
 if "popup_shown" not in st.session_state:
     st.session_state.popup_shown = False
 
-# --- 3. FILE PARSERS ---
+def save_to_cloud():
+    try:
+        db.collection("users").document(USER_ID).set({"chats": st.session_state.all_sessions})
+    except Exception as e:
+        st.sidebar.error(f"Cloud Save Failed: {e}")
+
+# --- 4. FILE PARSERS ---
 def extract_text(file):
     try:
         fname = file.name.lower()
@@ -35,7 +73,7 @@ def extract_text(file):
         st.sidebar.error(f"File Error: {e}")
     return ""
 
-# --- 4. SIDEBAR ---
+# --- 5. SIDEBAR ---
 MODEL_MAP = {
     "🔥 Pro (GPT-OSS 120B)": "openai/gpt-oss-120b",
     "⚖️ Balanced (Llama 3.3 70B)": "llama-3.3-70b-versatile",
@@ -43,7 +81,6 @@ MODEL_MAP = {
     "🎨 Nano Banana (Image Gen)": "NANO_MODE"
 }
 
-# Supported Global Languages Dictionary
 LANGUAGES = {
     "English 🇬🇧": "English",
     "Bengali 🇧🇩": "Bengali",
@@ -65,15 +102,14 @@ LANGUAGES = {
 with st.sidebar:
     st.title("⚙️ AI Control")
     
-    # Model Selector
     selected_label = st.selectbox("🧠 Choose Brain Power", options=list(MODEL_MAP.keys()), index=0, key="model_v10")
     model_choice = MODEL_MAP[selected_label]
     is_image_mode = (model_choice == "NANO_MODE")
     
-    # Global Language Selector
     selected_lang = st.selectbox("🌐 Select AI Output Language", options=list(LANGUAGES.keys()), index=0, key="lang_selector")
     target_language = LANGUAGES[selected_lang]
     
+    uploaded_file = None
     if not is_image_mode:
         web_search = st.toggle("Enable Live Web Search", value=True)
         uploaded_file = st.file_uploader("📎 Upload Context", type=['txt', 'py', 'md', 'pdf', 'docx'])
@@ -87,12 +123,14 @@ with st.sidebar:
         new_id = f"Session {datetime.now().strftime('%H:%M:%S')}"
         st.session_state.all_sessions[new_id] = []
         st.session_state.current_chat = new_id
+        save_to_cloud()
         st.rerun()
 
     if len(st.session_state.all_sessions) > 1:
         if st.button("🗑️ Delete All History", use_container_width=True, type="secondary", key="del_all_btn"):
             st.session_state.all_sessions = {"New Chat Session": []}
             st.session_state.current_chat = "New Chat Session"
+            save_to_cloud()
             st.rerun()
 
     st.divider()
@@ -107,9 +145,10 @@ with st.sidebar:
                 del st.session_state.all_sessions[chat_title]
                 if st.session_state.current_chat == chat_title:
                     st.session_state.current_chat = list(st.session_state.all_sessions.keys())[0]
+                save_to_cloud()
                 st.rerun()
 
-# --- 5. WELCOME POPUP LOGIC ---
+# --- 6. WELCOME POPUP LOGIC ---
 @st.dialog("👋 Welcome!")
 def show_welcome_box():
     st.markdown("""
@@ -127,12 +166,12 @@ def show_welcome_box():
 if not st.session_state.popup_shown:
     show_welcome_box()
 
-# --- 6. MAIN INTERFACE ---
+# --- 7. MAIN INTERFACE ---
 st.title(f"🚀 {st.session_state.current_chat}")
 
 try:
     groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-except:
+except Exception:
     st.error("Missing Groq API Key!")
     st.stop()
 
@@ -145,7 +184,7 @@ for msg in messages:
         else:
             st.markdown(msg["content"])
 
-# --- 7. UNIFIED CHAT LOGIC ---
+# --- 8. UNIFIED CHAT LOGIC ---
 if prompt := st.chat_input("Message or Image Prompt..."):
     messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -162,14 +201,13 @@ if prompt := st.chat_input("Message or Image Prompt..."):
                     
                     img_response = requests.get(image_url, timeout=60)
                     if img_response.status_code == 200:
-                        image_bytes = io.BytesIO(img_response.content)
-                        img_obj = Image.open(image_bytes)
                         status_box.update(label="✅ Image Peeled!", state="complete")
-                        st.image(img_obj)
-                        messages.append({"role": "assistant", "image": img_obj})
+                        st.image(image_url)
+                        messages.append({"role": "assistant", "image": image_url})
                         success = True
+                        save_to_cloud()
                         break
-                except:
+                except Exception:
                     if attempt == 0:
                         status_box.write("⏱️ Retrying...")
                         time.sleep(2)
@@ -181,15 +219,18 @@ if prompt := st.chat_input("Message or Image Prompt..."):
             context = ""
             if uploaded_file:
                 file_text = extract_text(uploaded_file)
-                context = f"\n\n[FILE DATA]\n{file_text}"
+                if file_text:
+                    context = f"\n\n[FILE DATA]\n{file_text}"
             
-            # Formulate the System Instruction based on translation needs
             system_instruction = f"You are a helpful AI assistant. IMPORTANT: You must respond entirely in the {target_language} language, regardless of the language the user writes in."
+            
+            # Filter history to only text payloads for Groq API
+            api_history = [{"role": m["role"], "content": m["content"]} for m in messages[:-1] if "content" in m]
             
             try:
                 stream = groq_client.chat.completions.create(
                     model=model_choice,
-                    messages=[{"role": "system", "content": system_instruction}] + messages[:-1] + [{"role": "user", "content": prompt + context}],
+                    messages=[{"role": "system", "content": system_instruction}] + api_history + [{"role": "user", "content": prompt + context}],
                     stream=True
                 )
                 for chunk in stream:
@@ -198,6 +239,7 @@ if prompt := st.chat_input("Message or Image Prompt..."):
                         placeholder.markdown(full_res + "▌")
                 placeholder.markdown(full_res)
                 messages.append({"role": "assistant", "content": full_res})
+                save_to_cloud()
             except Exception as e:
                 st.error(f"API Error: {e}")
 
@@ -212,5 +254,7 @@ if prompt := st.chat_input("Message or Image Prompt..."):
             smart_title = name_gen.choices[0].message.content.strip().replace('"', '')
             st.session_state.all_sessions[smart_title] = st.session_state.all_sessions.pop(st.session_state.current_chat)
             st.session_state.current_chat = smart_title
+            save_to_cloud()
             st.rerun()
-        except: pass
+        except Exception:
+            pass
