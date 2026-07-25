@@ -5,3 +5,5 @@ streamlit-local-storage
 python-docx
 google-genai
 Pillow
+requests
+google-cloud-firestore
