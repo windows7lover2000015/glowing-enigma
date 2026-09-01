@@ -12,7 +12,7 @@ from google.cloud import firestore
 from google.oauth2 import service_account
 
 # --- 1. PAGE SETUP ---
-st.set_page_config(page_title="Adrito's AI Chatbot", page_icon="🌐", layout="wide")
+st.set_page_config(page_title="Adrito's AI Chatbot", page_icon="logo.png", layout="wide")
 
 # --- 1b. BACKGROUND IMAGE ---
 def set_background(image_path):
@@ -136,6 +136,7 @@ LANGUAGES = {
 }
 
 with st.sidebar:
+    st.image("logo.png", width=120)
     st.title("⚙️ AI Control")
     
     selected_label = st.selectbox("🧠 Choose Brain Power", options=list(MODEL_MAP.keys()), index=0, key="model_v10")
