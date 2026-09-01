@@ -7,11 +7,47 @@ from docx import Document
 import io
 import requests
 import time
+import base64
 from google.cloud import firestore
 from google.oauth2 import service_account
 
 # --- 1. PAGE SETUP ---
 st.set_page_config(page_title="Adrito's AI Chatbot", page_icon="🌐", layout="wide")
+
+# --- 1b. BACKGROUND IMAGE ---
+def set_background(image_path):
+    with open(image_path, "rb") as f:
+        img_data = base64.b64encode(f.read()).decode()
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background-image: url("data:image/png;base64,{img_data}");
+            background-size: 300px;
+            background-position: top center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            background-color: #000000;
+        }}
+
+        /* Keep chat bubbles readable over the background */
+        [data-testid="stChatMessage"] {{
+            background-color: rgba(20, 20, 20, 0.85);
+            border-radius: 12px;
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }}
+
+        /* Sidebar stays solid dark so controls are legible */
+        [data-testid="stSidebar"] {{
+            background-color: rgba(10, 10, 10, 0.97);
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+set_background("background.png")
 
 # --- 2. CLOUD DATABASE CONNECTION ---
 @st.cache_resource
