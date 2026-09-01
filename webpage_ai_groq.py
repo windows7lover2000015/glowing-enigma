@@ -24,7 +24,7 @@ def set_background(image_path):
         .stApp {{
             background-image: url("data:image/png;base64,{img_data}");
             background-size: 300px;
-            background-position: top center;
+            background-position: center center;
             background-repeat: no-repeat;
             background-attachment: fixed;
             background-color: #000000;
