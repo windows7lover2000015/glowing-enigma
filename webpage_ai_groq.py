@@ -73,7 +73,7 @@ except Exception as e:
 if "user_id" not in st.session_state:
     st.session_state.user_id = f"user_{uuid.uuid4().hex[:8]}"
 
-# Sidebar text box lets users load a custom profile ID across devices
+# Sidebar profile switcher lets returning users access their history across devices
 with st.sidebar:
     custom_user_id = st.text_input("👤 Your Profile ID", value=st.session_state.user_id, help="Enter a custom handle to access your chats on another device.")
     if custom_user_id != st.session_state.user_id:
@@ -128,7 +128,7 @@ def extract_text(file):
 # --- 5. SIDEBAR CONTROLS ---
 MODEL_MAP = {
     "🔥 Pro (GPT-OSS 120B)": "openai/gpt-oss-120b",
-    "⚖️ Balanced (Llama 3.3 70B)": "llama-3.3-70b-versatile",
+    "⚖️ Balanced (Llama 3.1 70B)": "llama-3.1-70b-versatile",
     "⚡ Lightning (GPT-OSS 20B)": "openai/gpt-oss-20b",
     "🎨 Nano Banana (Image Gen)": "NANO_MODE"
 }
@@ -203,6 +203,26 @@ with st.sidebar:
                     st.session_state.current_chat = list(st.session_state.all_sessions.keys())[0]
                 save_to_cloud()
                 st.rerun()
+
+    st.divider()
+    # --- ADMIN DATABASE RESET ---
+    with st.expander("⚠️ Admin Database Reset"):
+        reset_pass = st.text_input("Enter Admin Password", type="password", key="admin_pass_key")
+        
+        # Pulls password securely from Streamlit Secrets
+        if reset_pass and reset_pass == st.secrets.get("ADMIN_PASSWORD"):
+            if st.button("🔥 PURGE ALL CLOUD CHATS", type="primary", use_container_width=True):
+                try:
+                    docs = db.collection("users").stream()
+                    for doc in docs:
+                        doc.reference.delete()
+                    
+                    st.session_state.all_sessions = {"New Chat Session": []}
+                    st.session_state.current_chat = "New Chat Session"
+                    st.success("Database completely cleared!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Reset failed: {e}")
 
 # --- 6. WELCOME POPUP LOGIC ---
 @st.dialog("👋 Welcome!")
@@ -299,7 +319,8 @@ if prompt := st.chat_input("Message or Image Prompt..."):
                 messages.append({"role": "assistant", "content": full_res})
                 save_to_cloud()
             except Exception as e:
-                st.error(f"API Error: {e}")
+                st.error(f"API Error ({model_choice}): {e}")
+                st.info("💡 Tip: Try switching to '🔥 Pro' or '⚡ Lightning' in the sidebar if this model is rate-limited or offline.")
 
     # SMART NAMING (Using Fast 20B)
     is_default = any(x in st.session_state.current_chat for x in ["Session", "New Chat"])
