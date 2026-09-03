@@ -128,7 +128,7 @@ def extract_text(file):
 # --- 5. SIDEBAR CONTROLS ---
 MODEL_MAP = {
     "🔥 Pro (GPT-OSS 120B)": "openai/gpt-oss-120b",
-    "⚖️ Balanced (Llama 3.1 70B)": "llama-3.1-70b-versatile",
+    "⚖️ Balanced (Llama 3.1 8B)": "llama-3.1-8b-instant",
     "⚡ Lightning (GPT-OSS 20B)": "openai/gpt-oss-20b",
     "🎨 Nano Banana (Image Gen)": "NANO_MODE"
 }
