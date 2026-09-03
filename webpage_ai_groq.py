@@ -69,11 +69,9 @@ except Exception as e:
     st.stop()
 
 # --- 3. SESSION STATE & ISOLATED CLOUD SYNC ---
-# Generate a unique browser session ID if not set
 if "user_id" not in st.session_state:
     st.session_state.user_id = f"user_{uuid.uuid4().hex[:8]}"
 
-# Sidebar profile switcher lets returning users access their history across devices
 with st.sidebar:
     custom_user_id = st.text_input("👤 Your Profile ID", value=st.session_state.user_id, help="Enter a custom handle to access your chats on another device.")
     if custom_user_id != st.session_state.user_id:
@@ -181,34 +179,39 @@ with st.sidebar:
         save_to_cloud()
         st.rerun()
 
+    # --- ENTER KEY CHAT DELETION FORM ---
     if len(st.session_state.all_sessions) > 1:
-        if st.button("🗑️ Delete All History", use_container_width=True, type="secondary", key="del_all_btn"):
+        with st.form(key="delete_chat_form", clear_on_submit=True):
+            st.write("🗑️ **Delete Chat (Press Enter)**")
+            selected_to_del = st.selectbox("Select chat to remove:", list(st.session_state.all_sessions.keys()))
+            delete_submitted = st.form_submit_button("Delete Selected Chat")
+            
+            if delete_submitted:
+                del st.session_state.all_sessions[selected_to_del]
+                if st.session_state.current_chat == selected_to_del:
+                    st.session_state.current_chat = list(st.session_state.all_sessions.keys())[0]
+                save_to_cloud()
+                st.rerun()
+
+        if st.button("🔥 Delete All History", use_container_width=True, type="secondary", key="del_all_btn"):
             st.session_state.all_sessions = {"New Chat Session": []}
             st.session_state.current_chat = "New Chat Session"
             save_to_cloud()
             st.rerun()
 
     st.divider()
+    # List session navigation buttons
     for chat_title in list(st.session_state.all_sessions.keys()):
-        cols = st.columns([0.8, 0.2])
-        if cols[0].button(chat_title, key=f"btn_{chat_title}", use_container_width=True, 
-                          type="primary" if chat_title == st.session_state.current_chat else "secondary"):
+        if st.button(chat_title, key=f"btn_{chat_title}", use_container_width=True, 
+                     type="primary" if chat_title == st.session_state.current_chat else "secondary"):
             st.session_state.current_chat = chat_title
             st.rerun()
-        if len(st.session_state.all_sessions) > 1:
-            if cols[1].button("❌", key=f"del_single_{chat_title}"):
-                del st.session_state.all_sessions[chat_title]
-                if st.session_state.current_chat == chat_title:
-                    st.session_state.current_chat = list(st.session_state.all_sessions.keys())[0]
-                save_to_cloud()
-                st.rerun()
 
     st.divider()
     # --- ADMIN DATABASE RESET ---
     with st.expander("⚠️ Admin Database Reset"):
         reset_pass = st.text_input("Enter Admin Password", type="password", key="admin_pass_key")
         
-        # Pulls password securely from Streamlit Secrets
         if reset_pass and reset_pass == st.secrets.get("ADMIN_PASSWORD"):
             if st.button("🔥 PURGE ALL CLOUD CHATS", type="primary", use_container_width=True):
                 try:
@@ -301,7 +304,6 @@ if prompt := st.chat_input("Message or Image Prompt..."):
             
             system_instruction = f"You are a helpful AI assistant. IMPORTANT: You must respond entirely in the {target_language} language, regardless of the language the user writes in."
             
-            # Filter history to only text payloads for Groq API
             api_history = [{"role": m["role"], "content": m["content"]} for m in messages[:-1] if "content" in m]
             
             try:
@@ -319,14 +321,13 @@ if prompt := st.chat_input("Message or Image Prompt..."):
                 save_to_cloud()
             except Exception as e:
                 st.error(f"API Error ({model_choice}): {e}")
-                st.info("💡 Tip: Try switching to '🔥 Pro' or '⚡ Lightning' in the sidebar if this model is rate-limited or offline.")
 
-    # SMART NAMING (Using Fast 20B)
+    # SMART NAMING (Using Llama 3.1 8B Instant)
     is_default = any(x in st.session_state.current_chat for x in ["Session", "New Chat"])
     if len(messages) >= 2 and is_default:
         try:
             name_gen = groq_client.chat.completions.create(
-                model="openai/gpt-oss-20b",
+                model="llama-3.1-8b-instant",
                 messages=[{"role": "system", "content": f"Return 2 words summarizing topic in the {target_language} language. No quotes."}, {"role": "user", "content": prompt}]
             )
             smart_title = name_gen.choices[0].message.content.strip().replace('"', '')
