@@ -259,7 +259,7 @@ def show_welcome_box():
     Hello! This is Adrito's AI Chatbot.
     This chatbot is made by Adrito Roy and is open source.
     
-    This chatbot has cloud storage and the chats sync with the cloud to your designated User ID. Please note that if the chatbot exceeds 1 million messages in total, the chat storage will reset because there is a fixed quota.
+    This chatbot has cloud storage and the chats sync with the cloud to your designated Profile ID. Please note that if the chatbot exceeds 1 million messages in total, the chat storage will reset because there is a fixed quota.
     
     🌐 **GitHub Repository:**
     [glowing-enigma](https://github.com/windows7lover2000015/glowing-enigma/tree/main)
