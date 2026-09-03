@@ -217,23 +217,27 @@ with st.sidebar:
                 st.rerun()
 
     st.divider()
-    # --- ADMIN DATABASE RESET ---
+    # --- ADMIN DATABASE RESET WITH ENTER KEY SUPPORT ---
     with st.expander("⚠️ Admin Database Reset"):
-        reset_pass = st.text_input("Enter Admin Password", type="password", key="admin_pass_key")
-        
-        if reset_pass and reset_pass == st.secrets.get("ADMIN_PASSWORD"):
-            if st.button("🔥 PURGE ALL CLOUD CHATS", type="primary", use_container_width=True):
-                try:
-                    docs = db.collection("users").stream()
-                    for doc in docs:
-                        doc.reference.delete()
-                    
-                    st.session_state.all_sessions = {"New Chat Session": []}
-                    st.session_state.current_chat = "New Chat Session"
-                    st.success("Database completely cleared!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Reset failed: {e}")
+        with st.form(key="admin_reset_form", clear_on_submit=True):
+            reset_pass = st.text_input("Enter Admin Password & Press Enter", type="password", key="admin_pass_key")
+            purge_submitted = st.form_submit_button("🔥 PURGE ALL CLOUD CHATS", type="primary", use_container_width=True)
+            
+            if purge_submitted:
+                if reset_pass and reset_pass == st.secrets.get("ADMIN_PASSWORD"):
+                    try:
+                        docs = db.collection("users").stream()
+                        for doc in docs:
+                            doc.reference.delete()
+                        
+                        st.session_state.all_sessions = {"New Chat Session": []}
+                        st.session_state.current_chat = "New Chat Session"
+                        st.success("Database completely cleared!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Reset failed: {e}")
+                else:
+                    st.error("Incorrect Admin Password!")
 
 # --- 6. WELCOME POPUP LOGIC ---
 @st.dialog("👋 Welcome!")
