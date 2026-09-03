@@ -200,12 +200,21 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-    # List session navigation buttons
+    
+    # --- LIST SESSION NAVIGATION BUTTONS WITH INDIVIDUAL DELETE (❌) BUTTONS ---
     for chat_title in list(st.session_state.all_sessions.keys()):
-        if st.button(chat_title, key=f"btn_{chat_title}", use_container_width=True, 
-                     type="primary" if chat_title == st.session_state.current_chat else "secondary"):
+        cols = st.columns([0.8, 0.2])
+        if cols[0].button(chat_title, key=f"btn_{chat_title}", use_container_width=True, 
+                          type="primary" if chat_title == st.session_state.current_chat else "secondary"):
             st.session_state.current_chat = chat_title
             st.rerun()
+        if len(st.session_state.all_sessions) > 1:
+            if cols[1].button("❌", key=f"del_single_{chat_title}"):
+                del st.session_state.all_sessions[chat_title]
+                if st.session_state.current_chat == chat_title:
+                    st.session_state.current_chat = list(st.session_state.all_sessions.keys())[0]
+                save_to_cloud()
+                st.rerun()
 
     st.divider()
     # --- ADMIN DATABASE RESET ---
