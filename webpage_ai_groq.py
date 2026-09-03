@@ -224,7 +224,8 @@ with st.sidebar:
             purge_submitted = st.form_submit_button("🔥 PURGE ALL CLOUD CHATS", type="primary", use_container_width=True)
             
             if purge_submitted:
-                if reset_pass and reset_pass == st.secrets.get("ADMIN_PASSWORD"):
+                admin_pwd = str(st.secrets.get("ADMIN_PASSWORD", "")).strip()
+                if reset_pass.strip() and reset_pass.strip() == admin_pwd:
                     try:
                         docs = db.collection("users").stream()
                         for doc in docs:
@@ -335,12 +336,12 @@ if prompt := st.chat_input("Message or Image Prompt..."):
             except Exception as e:
                 st.error(f"API Error ({model_choice}): {e}")
 
-    # SMART NAMING (Using Llama 3.1 8B Instant)
+    # SMART NAMING (Using Selected Model)
     is_default = any(x in st.session_state.current_chat for x in ["Session", "New Chat"])
     if len(messages) >= 2 and is_default:
         try:
             name_gen = groq_client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model=model_choice if not is_image_mode else "openai/gpt-oss-20b",
                 messages=[{"role": "system", "content": f"Return 2 words summarizing topic in the {target_language} language. No quotes."}, {"role": "user", "content": prompt}]
             )
             smart_title = name_gen.choices[0].message.content.strip().replace('"', '')
