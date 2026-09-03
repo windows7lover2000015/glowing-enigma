@@ -217,14 +217,19 @@ with st.sidebar:
                 st.rerun()
 
     st.divider()
-    # --- ADMIN DATABASE RESET WITH ADVANCED SECRET RESOLUTION ---
+    # --- ADMIN DATABASE RESET WITH MULTI-LEVEL SECRET LOOKUP ---
     with st.expander("⚠️ Admin Database Reset"):
         with st.form(key="admin_reset_form", clear_on_submit=True):
             reset_pass = st.text_input("Enter Admin Password & Press Enter", type="password", key="admin_pass_key")
             purge_submitted = st.form_submit_button("🔥 PURGE ALL CLOUD CHATS", type="primary", use_container_width=True)
             
             if purge_submitted:
-                raw_secret = st.secrets.get("ADMIN_PASSWORD") or st.secrets.get("admin_password") or ""
+                raw_secret = (
+                    st.secrets.get("ADMIN_PASSWORD") 
+                    or st.secrets.get("admin_password") 
+                    or st.secrets.get("firebase", {}).get("ADMIN_PASSWORD")
+                    or ""
+                )
                 admin_pwd = str(raw_secret).strip().strip('"').strip("'")
                 input_pwd = str(reset_pass).strip().strip('"').strip("'")
                 
@@ -247,14 +252,14 @@ with st.sidebar:
                 else:
                     st.error(f"Incorrect Password! Entered length: {len(input_pwd)} | Expected length: {len(admin_pwd)}")
 
-# --- 6. WELCOME POPUP LOGIC ---
+# --- 6. UPDATED WELCOME POPUP LOGIC ---
 @st.dialog("👋 Welcome!")
 def show_welcome_box():
     st.markdown("""
-    ### Hello! This is Adrito's AI Chatbot.
-    This chatbot is made by **Adrito Roy** and is open source. 
+    Hello! This is Adrito's AI Chatbot.
+    This chatbot is made by Adrito Roy and is open source.
     
-    This chatbot has cloud storage and the chats sync with the cloud to your device.
+    This chatbot has cloud storage and the chats sync with the cloud to your designated User ID. Please note that if the chatbot exceeds 1 million messages in total, the chat storage will reset because there is a fixed quota.
     
     🌐 **GitHub Repository:**
     [glowing-enigma](https://github.com/windows7lover2000015/glowing-enigma/tree/main)
