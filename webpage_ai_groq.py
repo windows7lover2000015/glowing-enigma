@@ -217,28 +217,35 @@ with st.sidebar:
                 st.rerun()
 
     st.divider()
-    # --- ADMIN DATABASE RESET WITH ENTER KEY SUPPORT ---
+    # --- ADMIN DATABASE RESET WITH ADVANCED SECRET RESOLUTION ---
     with st.expander("⚠️ Admin Database Reset"):
         with st.form(key="admin_reset_form", clear_on_submit=True):
             reset_pass = st.text_input("Enter Admin Password & Press Enter", type="password", key="admin_pass_key")
             purge_submitted = st.form_submit_button("🔥 PURGE ALL CLOUD CHATS", type="primary", use_container_width=True)
             
             if purge_submitted:
-                admin_pwd = str(st.secrets.get("ADMIN_PASSWORD", "")).strip()
-                if reset_pass.strip() and reset_pass.strip() == admin_pwd:
+                raw_secret = st.secrets.get("ADMIN_PASSWORD") or st.secrets.get("admin_password") or ""
+                admin_pwd = str(raw_secret).strip().strip('"').strip("'")
+                input_pwd = str(reset_pass).strip().strip('"').strip("'")
+                
+                if not admin_pwd:
+                    st.error("⚠️ 'ADMIN_PASSWORD' key missing from st.secrets!")
+                elif input_pwd == admin_pwd:
                     try:
-                        docs = db.collection("users").stream()
+                        docs = db.collection("users").list_documents()
+                        count = 0
                         for doc in docs:
-                            doc.reference.delete()
+                            doc.delete()
+                            count += 1
                         
                         st.session_state.all_sessions = {"New Chat Session": []}
                         st.session_state.current_chat = "New Chat Session"
-                        st.success("Database completely cleared!")
+                        st.success(f"Database cleared! ({count} documents deleted)")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Reset failed: {e}")
                 else:
-                    st.error("Incorrect Admin Password!")
+                    st.error(f"Incorrect Password! Entered length: {len(input_pwd)} | Expected length: {len(admin_pwd)}")
 
 # --- 6. WELCOME POPUP LOGIC ---
 @st.dialog("👋 Welcome!")
@@ -336,7 +343,7 @@ if prompt := st.chat_input("Message or Image Prompt..."):
             except Exception as e:
                 st.error(f"API Error ({model_choice}): {e}")
 
-    # SMART NAMING (Using Selected Model)
+    # SMART NAMING
     is_default = any(x in st.session_state.current_chat for x in ["Session", "New Chat"])
     if len(messages) >= 2 and is_default:
         try:
