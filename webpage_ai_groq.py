@@ -8,6 +8,7 @@ import io
 import requests
 import time
 import base64
+import uuid
 from google.cloud import firestore
 from google.oauth2 import service_account
 
@@ -16,36 +17,39 @@ st.set_page_config(page_title="Adrito's AI Chatbot", page_icon="logo.png", layou
 
 # --- 1b. BACKGROUND IMAGE ---
 def set_background(image_path):
-    with open(image_path, "rb") as f:
-        img_data = base64.b64encode(f.read()).decode()
-    st.markdown(
-        f"""
-        <style>
-        .stApp {{
-            background-image: url("data:image/png;base64,{img_data}");
-            background-size: 300px;
-            background-position: center center;
-            background-repeat: no-repeat;
-            background-attachment: fixed;
-            background-color: #000000;
-        }}
+    try:
+        with open(image_path, "rb") as f:
+            img_data = base64.b64encode(f.read()).decode()
+        st.markdown(
+            f"""
+            <style>
+            .stApp {{
+                background-image: url("data:image/png;base64,{img_data}");
+                background-size: 300px;
+                background-position: center center;
+                background-repeat: no-repeat;
+                background-attachment: fixed;
+                background-color: #000000;
+            }}
 
-        /* Keep chat bubbles readable over the background */
-        [data-testid="stChatMessage"] {{
-            background-color: rgba(20, 20, 20, 0.85);
-            border-radius: 12px;
-            padding: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }}
+            /* Keep chat bubbles readable over the background */
+            [data-testid="stChatMessage"] {{
+                background-color: rgba(20, 20, 20, 0.85);
+                border-radius: 12px;
+                padding: 12px;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+            }}
 
-        /* Sidebar stays solid dark so controls are legible */
-        [data-testid="stSidebar"] {{
-            background-color: rgba(10, 10, 10, 0.97);
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+            /* Sidebar stays solid dark so controls are legible */
+            [data-testid="stSidebar"] {{
+                background-color: rgba(10, 10, 10, 0.97);
+            }}
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+    except Exception:
+        pass
 
 set_background("background.png")
 
@@ -53,7 +57,6 @@ set_background("background.png")
 @st.cache_resource
 def get_db():
     cred_dict = dict(st.secrets["firebase"])
-    # Handle both formatted multiline strings and escaped newlines
     if "\\n" in cred_dict["private_key"]:
         cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
     creds = service_account.Credentials.from_service_account_info(cred_dict)
@@ -65,8 +68,21 @@ except Exception as e:
     st.error(f"Cloud Database Connection Failed: {e}")
     st.stop()
 
-# --- 3. SESSION STATE & CLOUD SYNC ---
-USER_ID = "adrito_default_user"
+# --- 3. SESSION STATE & ISOLATED CLOUD SYNC ---
+# Generate a unique browser session ID if not set
+if "user_id" not in st.session_state:
+    st.session_state.user_id = f"user_{uuid.uuid4().hex[:8]}"
+
+# Sidebar text box lets users load a custom profile ID across devices
+with st.sidebar:
+    custom_user_id = st.text_input("👤 Your Profile ID", value=st.session_state.user_id, help="Enter a custom handle to access your chats on another device.")
+    if custom_user_id != st.session_state.user_id:
+        st.session_state.user_id = custom_user_id
+        if "all_sessions" in st.session_state:
+            del st.session_state["all_sessions"]
+        st.rerun()
+
+USER_ID = st.session_state.user_id
 
 if "all_sessions" not in st.session_state:
     with st.spinner("☁️ Syncing history with Cloud Database..."):
@@ -81,7 +97,7 @@ if "all_sessions" not in st.session_state:
         except Exception as e:
             st.session_state.all_sessions = {"New Chat Session": []}
 
-if "current_chat" not in st.session_state:
+if "current_chat" not in st.session_state or st.session_state.current_chat not in st.session_state.all_sessions:
     st.session_state.current_chat = list(st.session_state.all_sessions.keys())[0]
 
 if "popup_shown" not in st.session_state:
@@ -109,7 +125,7 @@ def extract_text(file):
         st.sidebar.error(f"File Error: {e}")
     return ""
 
-# --- 5. SIDEBAR ---
+# --- 5. SIDEBAR CONTROLS ---
 MODEL_MAP = {
     "🔥 Pro (GPT-OSS 120B)": "openai/gpt-oss-120b",
     "⚖️ Balanced (Llama 3.3 70B)": "llama-3.3-70b-versatile",
@@ -136,7 +152,10 @@ LANGUAGES = {
 }
 
 with st.sidebar:
-    st.image("logo.png", width=120)
+    try:
+        st.image("logo.png", width=120)
+    except Exception:
+        pass
     st.title("⚙️ AI Control")
     
     selected_label = st.selectbox("🧠 Choose Brain Power", options=list(MODEL_MAP.keys()), index=0, key="model_v10")
@@ -192,8 +211,7 @@ def show_welcome_box():
     ### Hello! This is Adrito's AI Chatbot.
     This chatbot is made by **Adrito Roy** and is open source. 
     
-    This chatbot had cloud storage and the chats sync with the cloud and is saved on youur respective devices.
-    Please note that if the chatbot exceeds 1 million messages in total, the chat storage will reset in the cloud hence you lose all your messages
+    This chatbot has cloud storage and the chats sync with the cloud to your device.
     
     🌐 **GitHub Repository:**
     [glowing-enigma](https://github.com/windows7lover2000015/glowing-enigma/tree/main)
