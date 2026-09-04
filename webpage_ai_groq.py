@@ -266,6 +266,12 @@ def show_welcome_box():
     🌐 **GitHub Repository:**
     [glowing-enigma](https://github.com/windows7lover2000015/glowing-enigma/tree/main)
     """)
+    
+    🚀 **My other project(s):**
+    [Study Buddy](https://adritos-study-buddy.streamlit.app/)
+    """)
+
+    
     st.divider()
     if st.button("Ok!", use_container_width=True, type="primary"):
         st.session_state.popup_shown = True
