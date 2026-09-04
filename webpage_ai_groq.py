@@ -252,10 +252,8 @@ with st.sidebar:
                 else:
                     st.error(f"Incorrect Password! Entered length: {len(input_pwd)} | Expected length: {len(admin_pwd)}")
 
-# --- 6. UPDATED WELCOME POPUP LOGIC ---
+# --- 6. WELCOME POPUP LOGIC ---
 @st.dialog("👋 Welcome!")
-def show_welcome_box():
-    @st.dialog("👋 Welcome!")
 def show_welcome_box():
     st.markdown("""
     Hello! This is **Adrito's AI Chatbot**.
@@ -271,8 +269,6 @@ def show_welcome_box():
     🚀 **My other project(s):**
     [Study Buddy](https://adritos-study-buddy.streamlit.app/)
     """)
-
-    
     st.divider()
     if st.button("Ok!", use_container_width=True, type="primary"):
         st.session_state.popup_shown = True
