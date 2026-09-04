@@ -255,6 +255,8 @@ with st.sidebar:
 # --- 6. UPDATED WELCOME POPUP LOGIC ---
 @st.dialog("👋 Welcome!")
 def show_welcome_box():
+    @st.dialog("👋 Welcome!")
+def show_welcome_box():
     st.markdown("""
     Hello! This is **Adrito's AI Chatbot**.
     This chatbot is made by **Adrito Roy** and is open source.
@@ -265,8 +267,7 @@ def show_welcome_box():
     
     🌐 **GitHub Repository:**
     [glowing-enigma](https://github.com/windows7lover2000015/glowing-enigma/tree/main)
-    """)
-    
+
     🚀 **My other project(s):**
     [Study Buddy](https://adritos-study-buddy.streamlit.app/)
     """)
